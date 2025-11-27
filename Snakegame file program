@@ -1,0 +1,68 @@
+import psycopg2
+from datetime import datetime
+
+def connect_db():
+    return psycopg2.connect(
+        host="localhost",
+        database="your_db_name",
+        user="your_user",
+        password="your_password"
+    )
+
+class SnakeGameDB:
+    def __init__(self, conn):
+        self.conn = conn
+        self.cursor = conn.cursor()
+        self.create_tables()
+
+    def create_tables(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE,
+                level INT DEFAULT 1
+            );
+        """)
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS user_score (
+                id SERIAL PRIMARY KEY,
+                user_id INT REFERENCES users(id),
+                score INT,
+                saved_at TIMESTAMP
+            );
+        """)
+        self.conn.commit()
+
+    def get_or_create_user(self, username):
+        self.cursor.execute("SELECT id, level FROM users WHERE username = %s", (username,))
+        user = self.cursor.fetchone()
+        if user:
+            print(f"Welcome back, {username}! Current level: {user[1]}")
+            return user[0], user[1]
+        else:
+            self.cursor.execute("INSERT INTO users (username) VALUES (%s) RETURNING id", (username,))
+            user_id = self.cursor.fetchone()[0]
+            self.conn.commit()
+            print(f"New user {username} created with level 1")
+            return user_id, 1
+
+    def save_score(self, user_id, score):
+        self.cursor.execute(
+            "INSERT INTO user_score (user_id, score, saved_at) VALUES (%s, %s, %s)",
+            (user_id, score, datetime.now())
+        )
+        self.conn.commit()
+        print("Score saved")
+
+if __name__ == "__main__":
+    conn = connect_db()
+    snake_db = SnakeGameDB(conn)
+
+    username = input("Enter your Snake Game username: ")
+    user_id, level = snake_db.get_or_create_user(username)
+
+    # Simulate game pause and score save
+    score = int(input("Enter your current game score to save: "))
+    snake_db.save_score(user_id, score)
+
+    conn.close()
