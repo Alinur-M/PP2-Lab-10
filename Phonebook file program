@@ -1,0 +1,108 @@
+import psycopg2
+import csv
+
+def connect_db():
+    return psycopg2.connect(
+        host="localhost",
+        database="your_db_name",
+        user="your_user",
+        password="your_password"
+    )
+
+class PhoneBook:
+    def __init__(self, conn):
+        self.conn = conn
+        self.cursor = conn.cursor()
+        self.create_table()
+
+    def create_table(self):
+        self.cursor.execute("""
+            CREATE TABLE IF NOT EXISTS phonebook (
+                id SERIAL PRIMARY KEY,
+                first_name VARCHAR(50),
+                last_name VARCHAR(50),
+                phone VARCHAR(20)
+            );
+        """)
+        self.conn.commit()
+
+    def insert_from_csv(self, csv_path):
+        with open(csv_path, newline='') as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                first_name, last_name, phone = row
+                self.cursor.execute(
+                    "INSERT INTO phonebook (first_name, last_name, phone) VALUES (%s, %s, %s)",
+                    (first_name, last_name, phone)
+                )
+        self.conn.commit()
+
+    def insert_from_console(self):
+        first_name = input("Enter first name: ")
+        last_name = input("Enter last name: ")
+        phone = input("Enter phone: ")
+        self.cursor.execute(
+            "INSERT INTO phonebook (first_name, last_name, phone) VALUES (%s, %s, %s)",
+            (first_name, last_name, phone)
+        )
+        self.conn.commit()
+
+    def update_entry(self, identifier_type, identifier, new_first_name=None, new_phone=None):
+        if identifier_type not in ['first_name', 'phone']:
+            print("Identifier must be 'first_name' or 'phone'")
+            return
+        if new_first_name:
+            self.cursor.execute(
+                f"UPDATE phonebook SET first_name = %s WHERE {identifier_type} = %s",
+                (new_first_name, identifier)
+            )
+        if new_phone:
+            self.cursor.execute(
+                f"UPDATE phonebook SET phone = %s WHERE {identifier_type} = %s",
+                (new_phone, identifier)
+            )
+        self.conn.commit()
+
+    def query_entries(self, filter_type=None, filter_value=None):
+        if filter_type and filter_value:
+            self.cursor.execute(
+                f"SELECT * FROM phonebook WHERE {filter_type} = %s",
+                (filter_value,)
+            )
+        else:
+            self.cursor.execute("SELECT * FROM phonebook")
+        rows = self.cursor.fetchall()
+        for row in rows:
+            print(row)
+
+    def delete_entry(self, identifier_type, identifier):
+        if identifier_type not in ['first_name', 'phone']:
+            print("Identifier must be 'first_name' or 'phone'")
+            return
+        self.cursor.execute(
+            f"DELETE FROM phonebook WHERE {identifier_type} = %s",
+            (identifier,)
+        )
+        self.conn.commit()
+
+if __name__ == "__main__":
+    conn = connect_db()
+    phonebook = PhoneBook(conn)
+
+    # Usage:
+    # phonebook.insert_from_csv('phonebook.csv')
+    phonebook.insert_from_console()
+    phonebook.query_entries()
+
+    # Update 
+    name_to_update = input("First name to update: ")
+    new_phone = input("New phone: ")
+    phonebook.update_entry('first_name', name_to_update, new_phone=new_phone)
+    phonebook.query_entries()
+
+    # Delete
+    name_to_delete = input("First name to delete: ")
+    phonebook.delete_entry('first_name', name_to_delete)
+    phonebook.query_entries()
+
+    conn.close()
